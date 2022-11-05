@@ -60,7 +60,7 @@ doupdate () {
     COUNTER=$((COUNTER));
     for user in $(find /home/$usr/public_html -type f -name 'wp-config.php')
     do
-        if [ ! $force == "force" ]
+        if [ ! $force ]
         then
             updatecore $(dirname $user) $root
             updateplugin $(dirname $user) $root
@@ -81,7 +81,7 @@ doupdate () {
 
 userbackup () {
     usr=$1 force=$2
-    if [ ! $force == "force" ]
+    if [ ! $force ]
     then
         doupdate root $usr
     else
@@ -94,7 +94,12 @@ all () {
     cd /var/cpanel/users
     for user in *
     do
-        doupdate root $user
+        if [ ! $force ];
+        then      
+            doupdate root $user;
+        else        
+            doupdate root $user $force;
+        fi
     done
     licsys imunify360 enable
     licsys imunify360 update
