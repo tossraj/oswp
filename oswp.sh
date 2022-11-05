@@ -91,6 +91,7 @@ userbackup () {
 
 #Parses all users through cPanel's users file
 all () {
+    force=$1
     cd /var/cpanel/users
     for user in *
     do
