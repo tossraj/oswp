@@ -3,7 +3,8 @@ update WP | Core, Themes, Plugins for cPanel users
 
 ## Dependency
 
-This plugin requires a WP-CLI script to work
+This plugin requires a WP-CLI script to work.
+
 First install [WP-CLI](https://wp-cli.org/) and then install this plugin
 
 ## Installing 
