@@ -1,3 +1,5 @@
+#!/bin/sh
+
 rootpermissions () {
     param=$1
     if [ ! $param == "" ]
@@ -9,9 +11,9 @@ rootpermissions () {
 updatecore () {
     path=$1 allow=$2 force=$3
     if [ ! $force ];
-    then      
+    then
         wp core update --path=$path $(rootpermissions $allow);
-    else        
+    else
         wp core download --force --path=$path $(rootpermissions $allow);
     fi
 }
@@ -96,9 +98,9 @@ all () {
     for user in *
     do
         if [ ! $force ];
-        then      
+        then
             doupdate root $user;
-        else        
+        else
             doupdate root $user $force;
         fi
     done
@@ -129,7 +131,7 @@ helptext () {
 case "$1" in
     -h) helptext;;
     --help) helptext;;
-    --all) 
+    --all)
     case "$2" in
         "") all;;
         --force) all force;;
@@ -150,7 +152,7 @@ case "$1" in
     case "$3" in
         "") userbackup "$2";;
         --force) userbackup "$2" force;;
-        
+
         *)
           tput bold
           tput setaf 1
