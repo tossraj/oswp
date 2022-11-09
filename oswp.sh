@@ -104,10 +104,6 @@ all () {
             doupdate root $user $force;
         fi
     done
-    licsys imunify360 enable
-    licsys imunify360 update
-    licsys cpanel enable
-    licsys cpanel update
 }
 
 helptext () {
