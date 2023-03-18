@@ -26,7 +26,7 @@ updateplugin () {
         wp plugin update --all --path=$path $(rootpermissions $allow);
         wp theme delete $(wp theme list --status=inactive --field=name --path=$path $(rootpermissions $allow)) --path=$path $(rootpermissions $allow);
     else
-        wp plugin delete wp-file-manager hello akismet --path=$path $(rootpermissions $allow);
+        wp plugin delete wp-file-manager hello akismet better-search-replace classic-editor loginizer really-simple-ssl --path=$path $(rootpermissions $allow);
         wp plugin install $(wp plugin list --field=name --path=$path $(rootpermissions $allow)) --force --path=$path $(rootpermissions $allow);
         wp theme delete twentytwenty twentytwentyone twentytwentythree twentytwentytwo --path=$path $(rootpermissions $allow);
         wp theme install $(wp theme list --field=name --path=$path $(rootpermissions $allow)) --force --path=$path $(rootpermissions $allow);
