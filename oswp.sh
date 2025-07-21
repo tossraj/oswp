@@ -1,177 +1,161 @@
-#!/bin/sh
+#!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
 
-rootpermissions () {
-    param=$1
-    if [ ! $param == "" ]
-    then
-        echo "--allow-root"
-    fi
-}
+# ========================== CONFIGURATION ==========================
+WP_DIRS=(/home /home1 /home2 /home3)
+CPANEL_USERS_DIR="/var/cpanel/users"
 
-updatecore () {
-    path=$1 allow=$2 force=$3
-    if [ ! $force ];
-    then
-        wp core update --path=$path $(rootpermissions $allow);
-    else
-        wp core download --force --path=$path $(rootpermissions $allow);
-    fi
-}
-
-updateplugin () {
-    path=$1 allow=$2 force=$3
-    inactive_themes=$(wp theme list --status=inactive --field=name --path=$path $(rootpermissions $allow))
-    if [ ! $force ];
-    then
-        wp plugin delete wp-file-manager hello akismet better-search-replace classic-editor loginizer really-simple-ssl --path=$path $(rootpermissions $allow);
-        wp plugin update --all --path=$path $(rootpermissions $allow);
-        for theme in $inactive_themes; do
-            # Check if the theme is a child theme
-            if ! wp theme is-child-theme $theme --path=$path $(rootpermissions $allow); then
-                # If it's not a child theme, delete it
-                wp theme delete $theme --path=$path $(rootpermissions $allow)
-            fi
-        done
-    else
-        wp plugin delete wp-file-manager hello akismet better-search-replace classic-editor loginizer really-simple-ssl --path=$path $(rootpermissions $allow);
-        wp plugin install $(wp plugin list --field=name --path=$path $(rootpermissions $allow)) --force --path=$path $(rootpermissions $allow);        
-        for theme in $inactive_themes; do
-            # Check if the theme is a child theme
-            if ! wp theme is-child-theme $theme --path=$path $(rootpermissions $allow); then
-                # If it's not a child theme, delete it
-                wp theme delete $theme --path=$path $(rootpermissions $allow)
-            fi
-        done
-    fi
-}
-
-getsiteurl () {
-    path=$1 allow=$2
-    tput bold
-    tput setaf 12
-    wp option get siteurl --path=$path $(rootpermissions $allow)
+# ============================ UTILITIES ============================
+log() {
+    tput bold; tput setaf "$1";
+    echo -e "$2"
     tput sgr0
 }
 
-totalcount () {
-    COUNT=$(find /home/*/public_html -type f -name "wp-config.php" | wc -l)
-    echo $COUNT
+print_line() {
+    printf '%*s\n' "${COLUMNS:-$(tput cols)}" '' | tr ' ' -
 }
 
-tput bold
-tput setaf 12
-echo "Please wait Searching WordPress installations ....."
-# CNT=$(totalcount);
-tput sgr0
-tput bold
-tput setaf 12
-echo "Found "$CNT" WordPress Installations" .....
-echo "Updation process start ....."
-tput sgr0
-
-doupdate () {
-    root=$1 usr=$2 force=$3
-    COUNTER=$((COUNTER));
-    for user in $(find /home/$usr/public_html -type f -name 'wp-config.php')
-    do
-        if [ ! $force ]
-        then
-            updatecore $(dirname $user) $root
-            updateplugin $(dirname $user) $root
-        else
-            updatecore $(dirname $user) $root $force
-            updateplugin $(dirname $user) $root $force
-        fi
-        tput bold
-        tput setaf 2
-        echo "("$((COUNTER++))"/"$CNT") WordPress Core and Plugins updated successfully in "$(getsiteurl $(dirname $user) $root)
-        tput sgr0
-        chown -R $usr:$usr $(dirname $user)/*
-        chown $usr:nobody $(dirname $user)
-        chmod 750 $(dirname $user)
-        printf '%*s\n' "${COLUMNS:-$(tput cols)}" '' | tr ' ' -
-    done
+bold_green() {
+    log 2 "$1"
 }
 
-userbackup () {
-    usr=$1 force=$2
-    if [ ! $force ]
-    then
-        doupdate root $usr
+bold_red() {
+    log 1 "$1"
+}
+
+bold_blue() {
+    log 4 "$1"
+}
+
+# ========================== WP HELPERS =============================
+rootpermissions() {
+    [[ "${1:-}" == "root" ]] && echo "--allow-root"
+}
+
+get_site_url() {
+    local path="$1" allow="$2"
+    wp option get siteurl --path="$path" $(rootpermissions "$allow") || echo "[Invalid site]"
+}
+
+# ===================== UPDATE FUNCTIONS ============================
+update_core() {
+    local path="$1" allow="$2" force="${3:-}"
+    if [[ -z "$force" ]]; then
+        wp core update --path="$path" $(rootpermissions "$allow") || true
     else
-        doupdate root $usr $force
+        wp core download --force --path="$path" $(rootpermissions "$allow") || true
     fi
 }
 
-#Parses all users through cPanel's users file
-all () {
-    force=$1
-    cd /var/cpanel/users
-    for user in *
-    do
-        if [ ! $force ];
-        then
-            doupdate root $user;
-        else
-            doupdate root $user $force;
+update_plugins_and_themes() {
+    local path="$1" allow="$2" force="${3:-}"
+    local inactive_themes
+    inactive_themes=$(wp theme list --status=inactive --field=name --path="$path" $(rootpermissions "$allow"))
+
+    wp plugin delete wp-file-manager hello akismet better-search-replace classic-editor loginizer really-simple-ssl \
+        --path="$path" $(rootpermissions "$allow") || true
+
+    if [[ -z "$force" ]]; then
+        wp plugin update --all --path="$path" $(rootpermissions "$allow") || true
+    else
+        wp plugin install $(wp plugin list --field=name --path="$path" $(rootpermissions "$allow")) --force --path="$path" $(rootpermissions "$allow") || true
+    fi
+
+    for theme in $inactive_themes; do
+        if ! wp theme is-child-theme "$theme" --path="$path" $(rootpermissions "$allow") 2>/dev/null; then
+            wp theme delete "$theme" --path="$path" $(rootpermissions "$allow") || true
         fi
     done
 }
 
-helptext () {
-    tput bold
-    tput setaf 2
-        printf "\nupdate WP | Core, Theme, Plugins\n"
-        printf "\toswp [option...] << username >> [option-2...]\n\n"
-        printf "Options controlling type:\n"
-        printf -- "\t-a username                   Update seprate user Core, Theme, Plugins update [Normal updates]\n"
-        printf -- "\t-a username --force           Update seprate user Core, Theme, Plugins update [Forcefully updates]\n"
-        printf -- "\t--all                         Update All users Core, Theme, Plugins update [Normal updates]\n"
-        printf -- "\t--all --force                 Update All users Core, Theme, Plugins update [Forcefully updates]\n"
-        printf -- "\t-h                            Show Help\n"
-        printf -- "\t--help                        Show Help\n"
-        printf "Options extra:\n"
-        printf -- "\t-h, --help                    Show help\n"
-    tput sgr0
+fix_permissions() {
+    local path="$1" user="$2"
+    chown -R "$user:$user" "$path"/* || true
+    chown "$user:nobody" "$path" || true
+    chmod 750 "$path" || true
+}
+
+update_single_wp() {
+    local wp_config_path="$1" allow="$2" force="$3" user="$4"
+    local wp_path
+    wp_path="$(dirname "$wp_config_path")"
+
+    update_core "$wp_path" "$allow" "$force"
+    update_plugins_and_themes "$wp_path" "$allow" "$force"
+
+    bold_green "Updated: $(get_site_url "$wp_path" "$allow")"
+    fix_permissions "$wp_path" "$user"
+    print_line
+}
+
+# ======================== MAIN OPERATIONS ===========================
+find_all_wp_configs() {
+    for dir in "${WP_DIRS[@]}"; do
+        find "$dir" -mindepth 2 -maxdepth 4 -type f -name wp-config.php 2>/dev/null
+    done
+}
+
+doupdate_user() {
+    local allow="$1" user="$2" force="$3"
+    local wp_paths
+
+    mapfile -t wp_paths < <(find_all_wp_configs | grep "/home.*/$user/.*wp-config.php")
+
+    for wp_config in "${wp_paths[@]}"; do
+        update_single_wp "$wp_config" "$allow" "$force" "$user"
+    done
+}
+
+update_all_users() {
+    local force="$1"
+    for user in "$CPANEL_USERS_DIR"/*; do
+        [[ -f "$user" ]] || continue
+        user=$(basename "$user")
+        doupdate_user root "$user" "$force"
+    done
+}
+
+# ============================= HELP ================================
+show_help() {
+    bold_blue "\nWordPress Auto Updater"
+    echo "Usage: oswp [options]"
+    echo "Options:"
+    echo "  -a username           Update single user normally"
+    echo "  -a username --force   Update single user forcefully"
+    echo "  --all                 Update all users normally"
+    echo "  --all --force         Update all users forcefully"
+    echo "  -h, --help            Show this help"
     exit 0
 }
 
-case "$1" in
-    -h) helptext;;
-    --help) helptext;;
-    --all)
-    case "$2" in
-        "") all;;
-        --force) all force;;
-        *) echo "Invalid Option!";;
-    esac;;
-    --account)
-    case "$3" in
-        "") userbackup "$2";;
-        --force) userbackup "$2" force;;
+# ========================== ENTRY POINT ============================
+main() {
+    case "$1" in
+        -h|--help) show_help ;;
+        --all)
+            if [[ "${2:-}" == "--force" ]]; then
+                update_all_users "force"
+            else
+                update_all_users ""
+            fi
+            ;;
+        -a)
+            if [[ -z "${2:-}" ]]; then
+                bold_red "Username required!"
+                show_help
+            elif [[ "${3:-}" == "--force" ]]; then
+                doupdate_user root "$2" force
+            else
+                doupdate_user root "$2" ""
+            fi
+            ;;
         *)
-          tput bold
-          tput setaf 1
-          echo "Invalid Option!";
-          tput sgr0
-          helptext;;
-    esac;;
-    -a)
-    case "$3" in
-        "") userbackup "$2";;
-        --force) userbackup "$2" force;;
+            bold_red "Invalid option: $1"
+            show_help
+            ;;
+    esac
+}
 
-        *)
-          tput bold
-          tput setaf 1
-          echo "Invalid Option!";
-          tput sgr0
-          helptext;;
-    esac;;
-    *)
-      tput bold
-      tput setaf 1
-      echo "Invalid Option!";
-      tput sgr0
-      helptext;;
-esac
+main "$@"
