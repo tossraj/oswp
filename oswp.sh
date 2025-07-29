@@ -104,7 +104,15 @@ doupdate_user() {
     mapfile -t wp_paths < <(find_all_wp_configs | grep "/home.*/$user/.*wp-config.php")
 
     for wp_config in "${wp_paths[@]}"; do
+        # Try to update the user, and check for errors.
         update_single_wp "$wp_config" "$allow" "$force" "$user"
+        
+        # Check if the update_single_wp returned an error.
+        if [[ $? -ne 0 ]]; then
+            bold_red "Error updating user $user. Skipping this user."
+            print_line
+            continue  # Skip this user and continue with the next
+        fi
     done
 }
 
@@ -113,7 +121,14 @@ update_all_users() {
     for user in "$CPANEL_USERS_DIR"/*; do
         [[ -f "$user" ]] || continue
         user=$(basename "$user")
+
+        # Attempt to update the user and check for errors
         doupdate_user root "$user" "$force"
+        
+        if [[ $? -ne 0 ]]; then
+            bold_red "Skipping user $user due to errors."
+            continue  # Continue with the next user if there's an error
+        fi
     done
 }
 
