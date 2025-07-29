@@ -35,8 +35,14 @@ rootpermissions() {
 }
 
 get_site_url() {
-    local path="$1" allow="$2"
-    wp option get siteurl --path="$path" $(rootpermissions "$allow") || echo "[Invalid site]"
+    local path="$1" allow="$2" user="$3"
+    local url
+    url=$(wp option get siteurl --path="$path" $(rootpermissions "$allow") 2>/dev/null || true)
+    if [[ -z "$url" ]]; then
+        echo "[Invalid site] ($user)"
+    else
+        echo "$url"
+    fi
 }
 
 # ===================== UPDATE FUNCTIONS ============================
@@ -85,7 +91,7 @@ update_single_wp() {
     update_core "$wp_path" "$allow" "$force"
     update_plugins_and_themes "$wp_path" "$allow" "$force"
 
-    bold_green "Updated: $(get_site_url "$wp_path" "$allow")"
+    bold_green "Updated: $(get_site_url "$wp_path" "$allow" "$user")"
     fix_permissions "$wp_path" "$user"
     print_line
 }
@@ -112,7 +118,6 @@ doupdate_user() {
         for wp_config in "${wp_paths[@]}"; do
             wp_path="$(dirname "$wp_config")"
 
-            # Check if this is a valid WP installation
             if ! wp core is-installed --path="$wp_path" $(rootpermissions "$allow") &>/dev/null; then
                 bold_red "Skipping: Not a WordPress installation at $wp_path"
                 continue
@@ -125,39 +130,38 @@ doupdate_user() {
 
 update_all_users() {
     local force="$1"
-    for user in "$CPANEL_USERS_DIR"/*; do
-        [[ -f "$user" ]] || continue
-        user=$(basename "$user")
-
-        # Attempt to update the user and check for errors
-        doupdate_user root "$user" "$force"
-        
-        if [[ $? -ne 0 ]]; then
-            bold_red "Skipping user $user due to errors."
-            continue  # Continue with the next user if there's an error
-        fi
+    local usernames=()
+    for file in "$CPANEL_USERS_DIR"/*; do
+        [[ -f "$file" ]] || continue
+        usernames+=("$(basename "$file")")
     done
+    doupdate_user root "$force" "${usernames[@]}"
 }
 
 # ============================= HELP ================================
 show_help() {
     bold_blue "\nWordPress Auto Updater"
-    echo "Usage: oswp [options]"
-    echo "Options:"
-    echo "  -a username           Update single user normally"
-    echo "  -a username --force   Update single user forcefully"
-    echo "  --all                 Update all users normally"
-    echo "  --all --force         Update all users forcefully"
-    echo "  -h, --help            Show this help"
+    echo -e "Usage: \e[1moswp\e[0m [options]\n"
+    echo -e "\e[1mOptions:\e[0m"
+    echo -e "  \e[32m-a user1 user2 [--force]\e[0m    Update specified users (with optional force)"
+    echo -e "  \e[32m--all [--force]\e[0m              Update all users (with optional force)"
+    echo -e "  \e[32m-h, --help\e[0m                   Show this help message"
     exit 0
 }
 
 # ========================== ENTRY POINT ============================
 main() {
+    if [[ $# -lt 1 ]]; then
+        bold_red "Missing options"
+        show_help
+    fi
+
     case "$1" in
         -h|--help) show_help ;;
         --all)
-            update_all_users "${2:-}"  # "" or "force"
+            force=""
+            [[ "$2" == "--force" ]] && force="force"
+            update_all_users "$force"
             ;;
         -a)
             shift
