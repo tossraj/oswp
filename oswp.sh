@@ -98,21 +98,28 @@ find_all_wp_configs() {
 }
 
 doupdate_user() {
-    local allow="$1" user="$2" force="$3"
-    local wp_paths
+    local allow="$1" force="$2"; shift 2
+    local users=("$@")
 
-    mapfile -t wp_paths < <(find_all_wp_configs | grep "/home.*/$user/.*wp-config.php")
+    for user in "${users[@]}"; do
+        mapfile -t wp_paths < <(find_all_wp_configs | grep "/home.*/$user/.*wp-config.php")
 
-    for wp_config in "${wp_paths[@]}"; do
-        # Try to update the user, and check for errors.
-        update_single_wp "$wp_config" "$allow" "$force" "$user"
-        
-        # Check if the update_single_wp returned an error.
-        if [[ $? -ne 0 ]]; then
-            bold_red "Error updating user $user. Skipping this user."
-            print_line
-            continue  # Skip this user and continue with the next
+        if [[ "${#wp_paths[@]}" -eq 0 ]]; then
+            bold_red "No WordPress installations found for user: $user"
+            continue
         fi
+
+        for wp_config in "${wp_paths[@]}"; do
+            wp_path="$(dirname "$wp_config")"
+
+            # Check if this is a valid WP installation
+            if ! wp core is-installed --path="$wp_path" $(rootpermissions "$allow") &>/dev/null; then
+                bold_red "Skipping: Not a WordPress installation at $wp_path"
+                continue
+            fi
+
+            update_single_wp "$wp_config" "$allow" "$force" "$user"
+        done
     done
 }
 
@@ -150,21 +157,27 @@ main() {
     case "$1" in
         -h|--help) show_help ;;
         --all)
-            if [[ "${2:-}" == "--force" ]]; then
-                update_all_users "force"
-            else
-                update_all_users ""
-            fi
+            update_all_users "${2:-}"  # "" or "force"
             ;;
         -a)
-            if [[ -z "${2:-}" ]]; then
-                bold_red "Username required!"
+            shift
+            users=()
+            force=""
+            while [[ $# -gt 0 ]]; do
+                if [[ "$1" == "--force" ]]; then
+                    force="force"
+                else
+                    users+=("$1")
+                fi
+                shift
+            done
+
+            if [[ "${#users[@]}" -eq 0 ]]; then
+                bold_red "At least one username is required!"
                 show_help
-            elif [[ "${3:-}" == "--force" ]]; then
-                doupdate_user root "$2" force
-            else
-                doupdate_user root "$2" ""
             fi
+
+            doupdate_user root "$force" "${users[@]}"
             ;;
         *)
             bold_red "Invalid option: $1"
