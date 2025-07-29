@@ -160,7 +160,7 @@ main() {
         -h|--help) show_help ;;
         --all)
             force=""
-            [[ "$2" == "--force" ]] && force="force"
+            [[ "${2:-}" == "--force" ]] && force="force"
             update_all_users "$force"
             ;;
         -a)
